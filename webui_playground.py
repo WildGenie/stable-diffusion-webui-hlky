@@ -34,13 +34,11 @@ css_hide_progressbar = """
 .meta-text { display:none!important; }
 """
 
-css =  css_hide_progressbar
-css = css + """
+css = (css_hide_progressbar + """
 [data-testid="image"] {min-height: 512px !important};
 #main_body {display:none !important};
 #main_body>.col:nth-child(2){width:200%;}
-"""
-
+""")
 user_defaults = {}
 
 # make sure these indicies line up at the top of txt2img()
@@ -75,7 +73,7 @@ txt2img_defaults = {
 }
 
 if 'txt2img' in user_defaults:
-    txt2img_defaults.update(user_defaults['txt2img'])
+  txt2img_defaults |= user_defaults['txt2img']
 
 txt2img_toggle_defaults = [txt2img_toggles[i] for i in txt2img_defaults['toggles']]
 
@@ -129,7 +127,7 @@ img2img_defaults = {
 }
 
 if 'img2img' in user_defaults:
-    img2img_defaults.update(user_defaults['img2img'])
+  img2img_defaults |= user_defaults['img2img']
 
 img2img_toggle_defaults = [img2img_toggles[i] for i in img2img_defaults['toggles']]
 img2img_image_mode = 'sketch'
@@ -144,14 +142,14 @@ def update_image_mask(cropped_image, resize_mode, width, height):
     return gr.update(value=resized_cropped_image)
 
 def copy_img_to_input(selected=1, imgs = []):
-    try:
-        idx = int(0 if selected - 1 < 0 else selected - 1)
-        image_data = re.sub('^data:image/.+;base64,', '', imgs[idx])
-        processed_image = Image.open(BytesIO(base64.b64decode(image_data)))
-        update = gr.update(selected='img2img_tab')
-        return [processed_image, processed_image, update]
-    except IndexError:
-        return [None, None]
+  try:
+    idx = int(0 if selected < 1 else selected - 1)
+    image_data = re.sub('^data:image/.+;base64,', '', imgs[idx])
+    processed_image = Image.open(BytesIO(base64.b64decode(image_data)))
+    update = gr.update(selected='img2img_tab')
+    return [processed_image, processed_image, update]
+  except IndexError:
+      return [None, None]
 
 help_text = """
     ## Mask/Crop

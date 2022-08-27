@@ -138,8 +138,7 @@ def load_sd_from_config(ckpt, verbose=False):
     pl_sd = torch.load(ckpt, map_location="cpu")
     if "global_step" in pl_sd:
         print(f"Global Step: {pl_sd['global_step']}")
-    sd = pl_sd["state_dict"]
-    return sd
+    return pl_sd["state_dict"]
 
 def crash(e, s):
     global model
@@ -229,8 +228,7 @@ def create_random_tensors(shape, seeds):
         # but the original script had it like this so i do not dare change it for now because
         # it will break everyone's seeds.
         xs.append(torch.randn(shape, device=device))
-    x = torch.stack(xs)
-    return x
+    return torch.stack(xs)
 
 def torch_gc():
     torch.cuda.empty_cache()
@@ -238,9 +236,12 @@ def torch_gc():
 
 def load_GFPGAN():
     model_name = 'GFPGANv1.3'
-    model_path = os.path.join(GFPGAN_dir, 'experiments/pretrained_models', model_name + '.pth')
+    model_path = os.path.join(
+        GFPGAN_dir, 'experiments/pretrained_models', f'{model_name}.pth'
+    )
+
     if not os.path.isfile(model_path):
-        raise Exception("GFPGAN model not found at path "+model_path)
+        raise Exception(f"GFPGAN model not found at path {model_path}")
 
     sys.path.append(os.path.abspath(GFPGAN_dir))
     from gfpgan import GFPGANer
@@ -258,9 +259,12 @@ def load_RealESRGAN(model_name: str):
         'RealESRGAN_x4plus_anime_6B': RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=6, num_grow_ch=32, scale=4)
     }
 
-    model_path = os.path.join(RealESRGAN_dir, 'experiments/pretrained_models', model_name + '.pth')
+    model_path = os.path.join(
+        RealESRGAN_dir, 'experiments/pretrained_models', f'{model_name}.pth'
+    )
+
     if not os.path.isfile(model_path):
-        raise Exception(model_name+".pth not found at path "+model_path)
+        raise Exception(f"{model_name}.pth not found at path {model_path}")
 
     sys.path.append(os.path.abspath(RealESRGAN_dir))
     from realesrgan import RealESRGANer
@@ -294,7 +298,7 @@ def try_loading_RealESRGAN(model_name: str):
     if os.path.exists(RealESRGAN_dir):
         try:
             RealESRGAN = load_RealESRGAN(model_name) # TODO: Should try to load both models before giving up
-            print("Loaded RealESRGAN with model "+RealESRGAN.model.name)
+            print(f"Loaded RealESRGAN with model {RealESRGAN.model.name}")
         except Exception:
             import traceback
             print("Error loading RealESRGAN:", file=sys.stderr)
@@ -306,19 +310,19 @@ if opt.optimized:
     li, lo = [], []
     for key, v_ in sd.items():
         sp = key.split('.')
-        if(sp[0]) == 'model':
-            if('input_blocks' in sp):
-                li.append(key)
-            elif('middle_block' in sp):
-                li.append(key)
-            elif('time_embed' in sp):
+        if (sp[0]) == 'model':
+            if (
+                ('input_blocks' in sp)
+                or ('middle_block' in sp)
+                or ('time_embed' in sp)
+            ):
                 li.append(key)
             else:
                 lo.append(key)
     for key in li:
-        sd['model1.' + key[6:]] = sd.pop(key)
+        sd[f'model1.{key[6:]}'] = sd.pop(key)
     for key in lo:
-        sd['model2.' + key[6:]] = sd.pop(key)
+        sd[f'model2.{key[6:]}'] = sd.pop(key)
 
     config = OmegaConf.load("optimizedSD/v1-inference.yaml")
     config.modelUNet.params.small_batch = False
@@ -330,7 +334,7 @@ if opt.optimized:
     modelCS = instantiate_from_config(config.modelCondStage)
     _, _ = modelCS.load_state_dict(sd, strict=False)
     modelCS.eval()
-        
+
     modelFS = instantiate_from_config(config.modelFirstStage)
     _, _ = modelFS.load_state_dict(sd, strict=False)
     modelFS.eval()
@@ -445,8 +449,8 @@ def draw_prompt_matrix(im, width, height, all_prompts):
 
     sizes_hor = [(x[2] - x[0], x[3] - x[1]) for x in [d.multiline_textbbox((0, 0), x, font=fnt) for x in prompts_horiz]]
     sizes_ver = [(x[2] - x[0], x[3] - x[1]) for x in [d.multiline_textbbox((0, 0), x, font=fnt) for x in prompts_vert]]
-    hor_text_height = sum([x[1] + line_spacing for x in sizes_hor]) - line_spacing
-    ver_text_height = sum([x[1] + line_spacing for x in sizes_ver]) - line_spacing
+    hor_text_height = sum(x[1] + line_spacing for x in sizes_hor) - line_spacing
+    ver_text_height = sum(x[1] + line_spacing for x in sizes_ver) - line_spacing
 
     for col in range(cols):
         x = pad_left + width * col + width / 2
@@ -502,10 +506,18 @@ def resize_image(resize_mode, im, width, height):
 def check_prompt_length(prompt, comments):
     """this function tests if prompt is too long, and if so, adds a message to comments"""
 
-    tokenizer = (model if not opt.optimized else modelCS).cond_stage_model.tokenizer
-    max_length = (model if not opt.optimized else modelCS).cond_stage_model.max_length
+    tokenizer = (modelCS if opt.optimized else model).cond_stage_model.tokenizer
+    max_length = (modelCS if opt.optimized else model).cond_stage_model.max_length
 
-    info = (model if not opt.optimized else modelCS).cond_stage_model.tokenizer([prompt], truncation=True, max_length=max_length, return_overflowing_tokens=True, padding="max_length", return_tensors="pt")
+    info = (modelCS if opt.optimized else model).cond_stage_model.tokenizer(
+        [prompt],
+        truncation=True,
+        max_length=max_length,
+        return_overflowing_tokens=True,
+        padding="max_length",
+        return_tensors="pt",
+    )
+
     ovf = info['overflowing_tokens'][0]
     overflowing_count = ovf.shape[0]
     if overflowing_count == 0:
@@ -521,22 +533,21 @@ def save_sample(image, sample_path_i, filename, jpg_sample, prompts, seeds, widt
 normalize_prompt_weights, use_GFPGAN, write_info_files, prompt_matrix, init_img, uses_loopback, uses_random_seed_loopback, skip_save,
 skip_grid, sort_samples, sampler_name, ddim_eta, n_iter, batch_size, i, denoising_strength, resize_mode):
     filename_i = os.path.join(sample_path_i, filename)
-    if not jpg_sample:
-        if opt.save_metadata:
-            metadata = PngInfo()
-            metadata.add_text("SD:prompt", prompts[i])
-            metadata.add_text("SD:seed", str(seeds[i]))
-            metadata.add_text("SD:width", str(width))
-            metadata.add_text("SD:height", str(height))
-            metadata.add_text("SD:steps", str(steps))
-            metadata.add_text("SD:cfg_scale", str(cfg_scale))
-            metadata.add_text("SD:normalize_prompt_weights", str(normalize_prompt_weights))
-            metadata.add_text("SD:GFPGAN", str(use_GFPGAN and GFPGAN is not None))
-            image.save(f"{filename_i}.png", pnginfo=metadata)
-        else:
-            image.save(f"{filename_i}.png")
-    else:
+    if jpg_sample:
         image.save(f"{filename_i}.jpg", 'jpeg', quality=100, optimize=True)
+    elif opt.save_metadata:
+        metadata = PngInfo()
+        metadata.add_text("SD:prompt", prompts[i])
+        metadata.add_text("SD:seed", str(seeds[i]))
+        metadata.add_text("SD:width", str(width))
+        metadata.add_text("SD:height", str(height))
+        metadata.add_text("SD:steps", str(steps))
+        metadata.add_text("SD:cfg_scale", str(cfg_scale))
+        metadata.add_text("SD:normalize_prompt_weights", str(normalize_prompt_weights))
+        metadata.add_text("SD:GFPGAN", str(use_GFPGAN and GFPGAN is not None))
+        image.save(f"{filename_i}.png", pnginfo=metadata)
+    else:
+        image.save(f"{filename_i}.png")
     if write_info_files:
         # toggles differ for txt2img vs. img2img:
         offset = 0 if init_img is None else 2
@@ -556,8 +567,7 @@ skip_grid, sort_samples, sampler_name, ddim_eta, n_iter, batch_size, i, denoisin
             toggles.append(3 + offset)
         if sort_samples:
             toggles.append(4 + offset)
-        if write_info_files:
-            toggles.append(5 + offset)
+        toggles.append(5 + offset)
         if use_GFPGAN:
             toggles.append(6 + offset)
         info_dict = dict(
